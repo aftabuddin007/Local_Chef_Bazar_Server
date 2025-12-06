@@ -68,6 +68,7 @@ async function run() {
 
 const db = client.db('Assignment-11')
 const userCollection = db.collection('users')
+const mealCollection = db.collection('meals')
 // user related apis
 app.post('/users', async(req,res)=>{
   const user = req.body;
@@ -75,6 +76,11 @@ app.post('/users', async(req,res)=>{
   user.status = 'active';
   user.createdAt = new Date();
   const result = await userCollection.insertOne(user)
+  res.send(result)
+})
+// get all meal
+app.get('/meals', async (req,res)=>{
+  const result = await mealCollection.find().toArray()
   res.send(result)
 })
     // Send a ping to confirm a successful connection
