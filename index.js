@@ -92,6 +92,11 @@ app.get('/meals/:id',async (req,res)=>{
     result
   })
 })
+// recent meal 6 card
+app.get('/recent-meal',async(req,res)=>{
+  const result = await mealCollection.find().sort({rating:'desc'}).limit(8).toArray()
+  res.send(result)
+})
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
