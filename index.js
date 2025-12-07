@@ -70,6 +70,7 @@ const db = client.db('Assignment-11')
 const userCollection = db.collection('users')
 const mealCollection = db.collection('meals')
 const reviewCollection = db.collection('reviews')
+const favoriteCollection = db.collection('favorites')
 // user related apis
 app.post('/users', async(req,res)=>{
   const user = req.body;
@@ -112,7 +113,27 @@ app.get('/reviews/:foodId',async (req,res)=>{
 
 })
 
+// favorite data
+app.post('/favorites',async (req,res)=>{
+  const { userEmail, mealId, mealName, chefId, chefName, price } = req.body;
+const exists = await favoriteCollection.findOne({ userEmail, mealId });
+ if (exists) {
+    return res.status(400).send({ success: false, message: "Meal already in favorites" });
+  }
+const favorite = {
+    userEmail,
+    mealId,
+    mealName,
+    chefId,
+    chefName,
+    price,
+    addedTime: new Date(),
+  };
+const result = await favoriteCollection.insertOne(favorite);
+  res.send({ success: true, message: "Meal added to favorites", result });
 
+
+})
 
 
 // recent meal 6 card
