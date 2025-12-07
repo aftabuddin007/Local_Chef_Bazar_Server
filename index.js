@@ -69,6 +69,7 @@ async function run() {
 const db = client.db('Assignment-11')
 const userCollection = db.collection('users')
 const mealCollection = db.collection('meals')
+const reviewCollection = db.collection('reviews')
 // user related apis
 app.post('/users', async(req,res)=>{
   const user = req.body;
@@ -92,6 +93,28 @@ app.get('/meals/:id',async (req,res)=>{
     result
   })
 })
+// add review
+app.post('/reviews',async (req,res)=>{
+  const review = req.body;
+  // if (review.reviewerEmail !== req.decoded_email) {
+  //   return res.status(403).send({ message: 'Forbidden' });
+  // }
+  review.date = new Date();
+  const result = await reviewCollection.insertOne(review);
+  res.send({ success: true, message: 'Review submitted successfully!', result });
+
+})
+// get  review for a specific food
+app.get('/reviews/:foodId',async (req,res)=>{
+  const {foodId} = req.params;
+  const reviews = await reviewCollection.find({foodId}).sort({date: -1}).toArray();
+  res.send(reviews);
+
+})
+
+
+
+
 // recent meal 6 card
 app.get('/recent-meal',async(req,res)=>{
   const result = await mealCollection.find().sort({rating:'desc'}).limit(8).toArray()
