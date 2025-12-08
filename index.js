@@ -71,6 +71,7 @@ const userCollection = db.collection('users')
 const mealCollection = db.collection('meals')
 const reviewCollection = db.collection('reviews')
 const favoriteCollection = db.collection('favorites')
+const orderCollection = db.collection('orders')
 // user related apis
 app.post('/users', async(req,res)=>{
   const user = req.body;
@@ -135,7 +136,20 @@ const result = await favoriteCollection.insertOne(favorite);
 
 })
 
+// order data
+app.post('/orders',async (req,res)=>{
+  const order = req.body;
+   order.paymentStatus = "Pending";
+  order.orderStatus = "pending";
+  order.orderTime = new Date().toLocaleDateString()
+   const result = await orderCollection.insertOne(order);
 
+  res.send({
+    success: true,
+    message: "Order placed successfully!",
+    result
+  });
+})
 // recent meal 6 card
 app.get('/recent-meal',async(req,res)=>{
   const result = await mealCollection.find().sort({rating:'desc'}).limit(8).toArray()
