@@ -176,6 +176,13 @@ app.get('/reviews',async(req,res)=>{
   const result = await cursor.toArray()
   res.send(result)
 })
+// delete review
+app.delete('/reviews/:id',async (req,res)=>{
+  const id = req.params.id
+  const query = {_id: new ObjectId(id)}
+  const result = await reviewCollection.deleteOne(query);
+  res.send(result);
+})
 // recent meal 6 card
 app.get('/recent-meal',async(req,res)=>{
   const result = await mealCollection.find().sort({rating:'desc'}).limit(8).toArray()
