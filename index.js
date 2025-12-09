@@ -101,7 +101,7 @@ app.post('/reviews',async (req,res)=>{
   // if (review.reviewerEmail !== req.decoded_email) {
   //   return res.status(403).send({ message: 'Forbidden' });
   // }
-  review.date = new Date();
+  review.date = new Date().toLocaleDateString();
   const result = await reviewCollection.insertOne(review);
   res.send({ success: true, message: 'Review submitted successfully!', result });
 
@@ -113,7 +113,11 @@ app.get('/reviews/:foodId',async (req,res)=>{
   res.send(reviews);
 
 })
-
+// get all review 
+app.get('/reviews',async(req,res)=>{
+  const result = await reviewCollection.find().toArray()
+  res.send(result)
+})
 // favorite data
 app.post('/favorites',async (req,res)=>{
   const { userEmail, mealId, mealName, chefId, chefName, price } = req.body;
@@ -141,7 +145,7 @@ app.post('/orders',async (req,res)=>{
   const order = req.body;
    order.paymentStatus = "Pending";
   order.orderStatus = "pending";
-  order.orderTime = new Date().toLocaleDateString()
+  order.orderTime = new Date().toLocaleTimeString
    const result = await orderCollection.insertOne(order);
 
   res.send({
@@ -150,6 +154,18 @@ app.post('/orders',async (req,res)=>{
     result
   });
 })
+// show order data 
+app.get('/orders',async(req,res)=>{
+  const query = {}
+  const {email}=req.query;
+  if(email){
+    query.userEmail=email
+  }
+  const cursor = orderCollection.find(query)
+  const result = await cursor.toArray()
+  res.send(result)
+})
+// my review
 // recent meal 6 card
 app.get('/recent-meal',async(req,res)=>{
   const result = await mealCollection.find().sort({rating:'desc'}).limit(8).toArray()
