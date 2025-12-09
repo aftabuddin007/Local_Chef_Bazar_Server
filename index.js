@@ -165,7 +165,17 @@ app.get('/orders',async(req,res)=>{
   const result = await cursor.toArray()
   res.send(result)
 })
-// my review
+// my review for specific 
+app.get('/reviews',async(req,res)=>{
+  const query = {}
+  const {email}=req.query;
+  if(email){
+    query.userEmail=email
+  }
+  const cursor = reviewCollection.find(query)
+  const result = await cursor.toArray()
+  res.send(result)
+})
 // recent meal 6 card
 app.get('/recent-meal',async(req,res)=>{
   const result = await mealCollection.find().sort({rating:'desc'}).limit(8).toArray()
