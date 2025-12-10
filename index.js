@@ -183,6 +183,26 @@ app.delete('/reviews/:id',async (req,res)=>{
   const result = await reviewCollection.deleteOne(query);
   res.send(result);
 })
+// update review
+// UPDATE Review
+app.patch('/reviews/:id', async (req, res) => {
+  const id = req.params.id;
+  const updatedReview = req.body;
+
+  const result = await reviewCollection.updateOne(
+    { _id: new ObjectId(id) },
+    {
+      $set: {
+        rating: updatedReview.rating,
+        comment: updatedReview.comment,
+        date: new Date().toLocaleDateString()
+      }
+    }
+  );
+
+  res.send(result)
+});
+
 // recent meal 6 card
 app.get('/recent-meal',async(req,res)=>{
   const result = await mealCollection.find().sort({rating:'desc'}).limit(8).toArray()
