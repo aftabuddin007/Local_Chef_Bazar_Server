@@ -132,7 +132,7 @@ const favorite = {
     chefId,
     chefName,
     price,
-    addedTime: new Date(),
+    addedTime: new Date().toLocaleDateString(),
   };
 const result = await favoriteCollection.insertOne(favorite);
   res.send({ success: true, message: "Meal added to favorites", result });
@@ -184,7 +184,7 @@ app.delete('/reviews/:id',async (req,res)=>{
   res.send(result);
 })
 // update review
-// UPDATE Review
+
 app.patch('/reviews/:id', async (req, res) => {
   const id = req.params.id;
   const updatedReview = req.body;
@@ -202,7 +202,24 @@ app.patch('/reviews/:id', async (req, res) => {
 
   res.send(result)
 });
-
+// my favorite for specific 
+app.get('/favorites',async(req,res)=>{
+  const query = {}
+  const {email}=req.query;
+  if(email){
+    query.userEmail=email
+  }
+  const cursor = favoriteCollection.find(query)
+  const result = await cursor.toArray()
+  res.send(result)
+})
+// delete favorite meal
+app.delete('/favorites/:id',async (req,res)=>{
+  const id = req.params.id
+  const query = {_id: new ObjectId(id)}
+  const result = await favoriteCollection.deleteOne(query);
+  res.send(result);
+})
 // recent meal 6 card
 app.get('/recent-meal',async(req,res)=>{
   const result = await mealCollection.find().sort({rating:'desc'}).limit(8).toArray()
