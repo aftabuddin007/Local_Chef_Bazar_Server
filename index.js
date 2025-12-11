@@ -107,6 +107,26 @@ app.get('/meal',async(req,res)=>{
   const result = await cursor.toArray()
   res.send(result)
 })
+// update meal details
+app.put('/meals/:id',async (req,res)=>{
+  const id = req.params.id;
+  const updateData = req.body;
+    const result = await mealCollection.updateOne(
+                { _id: new ObjectId(id) },
+                { $set: updateData }
+            );
+   if (result.matchedCount === 0) {
+                return res.status(404).json({ message: "Meal not found" });
+            }
+  res.send(result)
+})
+// delete specific meal
+app.delete('/meal/:id',async (req,res)=>{
+  const id = req.params.id
+  const query = {_id: new ObjectId(id)}
+  const result = await mealCollection.deleteOne(query);
+  res.send(result);
+})
 // get all meal
 app.get('/meals', async (req,res)=>{
   const result = await mealCollection.find().toArray()
