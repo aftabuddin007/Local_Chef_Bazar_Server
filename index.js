@@ -86,7 +86,7 @@ app.post('/users', async(req,res)=>{
 // upload meal
 app.post('/meals',async (req,res)=>{
   const mealData = req.body;
-  console.log(mealData)
+  // console.log(mealData)
   // mealData.date = new Date().toLocaleDateString();
   const result  =await mealCollection.insertOne(mealData)
    res.send({
@@ -94,6 +94,18 @@ app.post('/meals',async (req,res)=>{
       message: "Meal added successfully!",
       result
     });
+})
+// get specific meal
+ 
+app.get('/meal',async(req,res)=>{
+  const query = {}
+  const {email}=req.query;
+  if(email){
+    query.userEmail=email
+  }
+  const cursor = mealCollection.find(query)
+  const result = await cursor.toArray()
+  res.send(result)
 })
 // get all meal
 app.get('/meals', async (req,res)=>{
