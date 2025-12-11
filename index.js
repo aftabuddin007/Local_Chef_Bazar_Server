@@ -4,7 +4,7 @@ const app = express()
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 require('dotenv').config()
 const port = process.env.PORT || 3000
-
+const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY)
 
 const admin = require("firebase-admin");
 
@@ -72,6 +72,8 @@ const mealCollection = db.collection('meals')
 const reviewCollection = db.collection('reviews')
 const favoriteCollection = db.collection('favorites')
 const orderCollection = db.collection('orders')
+const requestCollection = db.collection('request')
+const paymentOrderCollection = db.collection('payment')
 // user related apis
 app.post('/users', async(req,res)=>{
   const user = req.body;
@@ -80,6 +82,18 @@ app.post('/users', async(req,res)=>{
   user.createdAt = new Date();
   const result = await userCollection.insertOne(user)
   res.send(result)
+})
+// upload meal
+app.post('/meals',async (req,res)=>{
+  const mealData = req.body;
+  console.log(mealData)
+  // mealData.date = new Date().toLocaleDateString();
+  const result  =await mealCollection.insertOne(mealData)
+   res.send({
+      success: true,
+      message: "Meal added successfully!",
+      result
+    });
 })
 // get all meal
 app.get('/meals', async (req,res)=>{
@@ -139,13 +153,71 @@ const result = await favoriteCollection.insertOne(favorite);
 
 
 })
+// payment process
+app.post('/create-checkout-session',async (req,res)=>{
+  const paymentInfo = req.body;
+  const amount = parseInt(paymentInfo.price) * 100;
+  // console.log(paymentInfo)
+  // res.send(paymentInfo)
+  const session = await stripe.checkout.sessions.create({
+    line_items:[
+      {
+        price_data:{
+          currency:'usd',
+          unit_amount: amount,
+          product_data: {
+          name: `Please pay for: ${paymentInfo.mealName}`
+          }
 
+        },
+        quantity:paymentInfo?.quantity,
+      },
+    ],
+    customer_email:paymentInfo?.email,
+    mode:'payment',
+    metadata: {
+    mealId: paymentInfo.mealId,
+    mealName: paymentInfo.mealName,
+    price: paymentInfo.price,
+    quantity: paymentInfo.quantity
+    },
+    success_url:`${process.env.CLIENT_DOMIAN}/dashboard/payment-success?session_id={CHECKOUT_SESSION_ID}`,
+    cancel_url:`${process.env.CLIENT_DOMIAN}/dashboard/myOrder`
+  })
+  res.send({url:session.url})
+})
+// payment post
+app.post('/payment-success',async(req,res)=>{
+  const {sessionId}= req.body;
+  const session = await stripe.checkout.sessions.retrieve(sessionId)
+  const order = await orderCollection.findOne({_id: new ObjectId(session.metadata.mealId),
+
+  })
+  const orderData = await paymentOrderCollection.findOne({
+    transactionId:session.payment_intent,
+  })
+  // console.log(session)
+  if(session.status === 'complete'&& !orderData ){
+
+    const orderInfo = {
+      mealId : session.metadata.mealId,
+      transactionId:session.payment_intent,
+      customer_email:session.customer_email,
+      status:'pending',
+      payment_status:session.payment_status,
+      price:session.amount_total/100,
+  
+    }
+    const result = await paymentOrderCollection.insertOne(orderInfo)
+  }
+  res.send(order)
+})
 // order data
 app.post('/orders',async (req,res)=>{
   const order = req.body;
    order.paymentStatus = "Pending";
   order.orderStatus = "pending";
-  order.orderTime = new Date().toLocaleTimeString
+  order.orderTime = new Date().toLocaleTimeString()
    const result = await orderCollection.insertOne(order);
 
   res.send({
@@ -220,6 +292,30 @@ app.delete('/favorites/:id',async (req,res)=>{
   const result = await favoriteCollection.deleteOne(query);
   res.send(result);
 })
+// my profile api
+app.get('/users',async(req,res)=>{
+  const query = {}
+  const {email}=req.query;
+  if(email){
+    query.email = email
+  }
+  const cursor = userCollection.find(query)
+  const result = await cursor.toArray()
+  res.send(result)
+})
+//user request collection
+app.post('/request',async(req,res)=>{
+  const request = req.body;
+  request.requestStatus = "pending"; 
+  request.requestTime = new Date().toLocaleTimeString();
+  const result = await requestCollection.insertOne(request)
+    res.send({
+    success: true,
+    message: "Request sent successfully!",
+    result
+  });
+}) 
+
 // recent meal 6 card
 app.get('/recent-meal',async(req,res)=>{
   const result = await mealCollection.find().sort({rating:'desc'}).limit(8).toArray()
