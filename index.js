@@ -65,7 +65,17 @@ async function run() {
     try {
     // Connect the client to the server	(optional starting in v4.7)
     await client.connect();
+// admin token
+const verifyAdmin = async (req, res, next) => {
+  const email = req.decoded_email; 
+  const user = await userCollection.findOne({ email });
 
+  if (user?.role !== "admin") {
+    return res.status(403).send({ message: "Forbidden: Admins Only" });
+  }
+
+  next();
+};
 const db = client.db('Assignment-11')
 const userCollection = db.collection('users')
 const mealCollection = db.collection('meals')
@@ -83,6 +93,20 @@ app.post('/users', async(req,res)=>{
   const result = await userCollection.insertOne(user)
   res.send(result)
 })
+// manage user show all user
+app.get('/users',verifyFBToken, verifyAdmin,async (req,res)=>{
+  const result = await userCollection.find().toArray()
+  res.send(result)
+})
+app.patch('/users/:id',async(req,res)=>{
+  const id = req.params.id;
+  // console.log(id)
+  const result = await userCollection.updateOne(
+    { _id: new ObjectId(id) },
+    { $set: { status: "fraud" } }
+  )
+  res.send(result)
+})
 // upload meal
 app.post('/meals',async (req,res)=>{
   const mealData = req.body;
@@ -95,6 +119,19 @@ app.post('/meals',async (req,res)=>{
       result
     });
 })
+// fraud can't upload meal
+// app.post('/meals', verifyFBToken,  async (req, res) => {
+//   const email = req.decoded_email;
+
+//   const user = await userCollection.findOne({ email });
+
+//   if (user.status === "fraud") {
+//     return res.status(403).send({ message: "Fraud chefs cannot create meals" });
+//   }
+
+  
+// });
+
 // get specific meal
  
 app.get('/meal',async(req,res)=>{
@@ -269,6 +306,19 @@ app.get('/orders',async(req,res)=>{
   const result = await cursor.toArray()
   res.send(result)
 })
+// fraud can't order
+// app.post('/order', verifyFBToken, async (req, res) => {
+//   const email = req.decoded_email;
+
+//   const user = await userCollection.findOne({ email });
+
+//   if (user.status === "fraud") {
+//     return res.status(403).send({ message: "Fraud users cannot place orders" });
+//   }
+
+
+// });
+
 // my review for specific 
 app.get('/reviews',async(req,res)=>{
   const query = {}
