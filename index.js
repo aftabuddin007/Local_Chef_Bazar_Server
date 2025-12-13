@@ -108,10 +108,21 @@ app.patch('/users/:id',async(req,res)=>{
   res.send(result)
 })
 // upload meal
-app.post('/meals',async (req,res)=>{
+app.post('/meals',verifyFBToken,async (req,res)=>{
+  const email = req.decoded_email;
   const mealData = req.body;
   // console.log(mealData)
   // mealData.date = new Date().toLocaleDateString();
+   
+
+  const user = await userCollection.findOne({ email });
+
+  
+  if (user?.role === 'chef' && user?.status === 'fraud') {
+    return res.status(403).send({
+      message: 'Fraud chefs cannot create meals'
+    });
+  }
   const result  =await mealCollection.insertOne(mealData)
    res.send({
       success: true,
@@ -282,13 +293,20 @@ app.post('/payment-success',async(req,res)=>{
   res.send(order)
 })
 // order data
-app.post('/orders',async (req,res)=>{
+app.post('/orders',verifyFBToken,async (req,res)=>{
+  const email = req.decoded_email;
   const order = req.body;
-   order.paymentStatus = "Pending";
+   
+   const user = await userCollection.findOne({ email });
+if (user?.role === 'customer' && user?.status === 'fraud') {
+    return res.status(403).send({
+      message: 'Fraud users cannot place orders'
+    });
+  }
+  order.paymentStatus = "Pending";
   order.orderStatus = "pending";
   order.orderTime = new Date().toLocaleTimeString()
    const result = await orderCollection.insertOne(order);
-
   res.send({
     success: true,
     message: "Order placed successfully!",
