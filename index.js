@@ -76,6 +76,17 @@ const verifyAdmin = async (req, res, next) => {
 
   next();
 };
+// chef token
+const verifyChef = async (req, res, next) => {
+  const email = req.decoded_email; 
+  const user = await userCollection.findOne({ email });
+
+  if (user?.role !== "chef") {
+    return res.status(403).send({ message: "Forbidden: chef Only check" });
+  }
+req.chef = user; 
+  next();
+};
 const db = client.db('Assignment-11')
 const userCollection = db.collection('users')
 const mealCollection = db.collection('meals')
@@ -98,6 +109,7 @@ app.get('/users',verifyFBToken, verifyAdmin,async (req,res)=>{
   const result = await userCollection.find().toArray()
   res.send(result)
 })
+// make fraud user
 app.patch('/users/:id',async(req,res)=>{
   const id = req.params.id;
   // console.log(id)
@@ -106,6 +118,14 @@ app.patch('/users/:id',async(req,res)=>{
     { $set: { status: "fraud" } }
   )
   res.send(result)
+})
+// user based role
+app.get('/users/:email/role',async(req,res)=>{
+  const email   = req.params.email
+  const query ={email}
+  const user = await userCollection.findOne(query)
+  res.send({role:user?.role || 'customer'})
+
 })
 // upload meal
 app.post('/meals',verifyFBToken,async (req,res)=>{
@@ -292,6 +312,19 @@ app.post('/payment-success',async(req,res)=>{
   }
   res.send(order)
 })
+// statistics
+app.get('/orders/payment-status/stats',async(req,res)=>{
+  const pipeline = [
+   { 
+    $group:{
+      _id:'$orderStatus',
+      count:{$sum:1}
+    }
+  }
+  ]
+  const result  = await orderCollection.aggregate(pipeline).toArray()
+  res.send(result)
+})
 // order data
 app.post('/orders',verifyFBToken,async (req,res)=>{
   const email = req.decoded_email;
@@ -324,6 +357,22 @@ app.get('/orders',async(req,res)=>{
   const result = await cursor.toArray()
   res.send(result)
 })
+// specific chef can see his order req
+app.get('/order', verifyFBToken, verifyChef, async (req, res) => {
+   
+  try {
+    const result = await orderCollection
+      .find({ chefId: req.chef.chefId })
+      .toArray();
+
+    res.send(result);
+  } catch (error) {
+    res.status(500).send({ message: 'Server error' });
+  }
+});
+
+
+
 // fraud can't order
 // app.post('/order', verifyFBToken, async (req, res) => {
 //   const email = req.decoded_email;
@@ -393,7 +442,7 @@ app.delete('/favorites/:id',async (req,res)=>{
   res.send(result);
 })
 // my profile api
-app.get('/users',async(req,res)=>{
+app.get('/user',async(req,res)=>{
   const query = {}
   const {email}=req.query;
   if(email){
@@ -415,7 +464,55 @@ app.post('/request',async(req,res)=>{
     result
   });
 }) 
+// manage admin or chef request
+app.get('/request',verifyFBToken, verifyAdmin,async (req,res)=>{
+  const result = await requestCollection.find().toArray()
+  res.send(result)
+})
+//add & cancel user request
+app.patch('/request/:id',verifyFBToken,async (req,res)=>{
+    const id = req.params.id;
+    const requestStatus = req.body.requestStatus
+    const request = await requestCollection.findOne({ _id: new ObjectId(id) });
 
+    const query = {_id:new ObjectId(id)}
+    const updateStatus = {
+      $set:{
+        requestStatus:requestStatus
+      }}
+
+    const result = await requestCollection.updateOne(query,updateStatus)
+    if (requestStatus ==='approved'){
+      const userQuery = { email: request.userEmail }; 
+      let userUpdate = {};
+      if(request.requestType === 'chef'){
+        const chefId = 'chef-'+ Math.floor(1000 + Math.random() * 9000);
+        userUpdate={
+          $set:{
+            role:'chef',
+            chefId :chefId
+          }
+        }
+      }else if(request.requestType==='admin'){
+        userUpdate={
+          $set:{
+            role:'admin'
+          }
+        }
+      }
+
+await userCollection.updateOne(userQuery, userUpdate);
+    }
+    
+    
+    
+    
+    
+    res.send(result)
+//    
+
+//   res.send({ message: "Request rejected successfully" });
+})
 // recent meal 6 card
 app.get('/recent-meal',async(req,res)=>{
   const result = await mealCollection.find().sort({rating:'desc'}).limit(8).toArray()
