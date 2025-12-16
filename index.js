@@ -276,10 +276,11 @@ app.post('/create-checkout-session',async (req,res)=>{
     customer_email:paymentInfo?.email,
     mode:'payment',
     metadata: {
-    mealId: paymentInfo.mealId,
+    
     mealName: paymentInfo.mealName,
     price: paymentInfo.price,
-    quantity: paymentInfo.quantity
+    quantity: paymentInfo.quantity,
+    orderId:paymentInfo.orderId
     },
     success_url:`${process.env.CLIENT_DOMIAN}/dashboard/payment-success?session_id={CHECKOUT_SESSION_ID}`,
     cancel_url:`${process.env.CLIENT_DOMIAN}/dashboard/myOrder`
@@ -289,41 +290,86 @@ app.post('/create-checkout-session',async (req,res)=>{
 // payment post
 app.post('/payment-success',async(req,res)=>{
   const {sessionId}= req.body;
+  
   const session = await stripe.checkout.sessions.retrieve(sessionId)
-  const order = await orderCollection.findOne({_id: new ObjectId(session.metadata.mealId),
-
+  const orderId = session.metadata.orderId;
+    if (!orderId) {
+    return res.status(400).send({ message: 'Order ID missing in metadata' });
+  }
+  const order = await orderCollection.findOne({_id: new ObjectId(orderId),
+    
   })
+  
   const orderData = await paymentOrderCollection.findOne({
     transactionId:session.payment_intent,
   })
   // console.log(session)
-  if(session.status === 'complete'&& !orderData ){
+  if(session.payment_status === 'paid'&& !orderData ){
 
     const orderInfo = {
-      mealId : session.metadata.mealId,
+       orderId: new ObjectId(orderId),
       transactionId:session.payment_intent,
       customer_email:session.customer_email,
-      status:'pending',
+      
       payment_status:session.payment_status,
       price:session.amount_total/100,
+      
+        createdAt: new Date(),
   
     }
     const result = await paymentOrderCollection.insertOne(orderInfo)
+    
+    await orderCollection.updateOne(
+  { _id: new ObjectId(orderId) },
+  { $set: { paymentStatus: 'Paid' } }
+);
   }
-  res.send(order)
+   const updatedOrder = await orderCollection.findOne({ _id: new ObjectId(orderId) });
+    res.send({updatedOrder,order});
 })
 // statistics
-app.get('/orders/payment-status/stats',async(req,res)=>{
-  const pipeline = [
-   { 
-    $group:{
-      _id:'$orderStatus',
-      count:{$sum:1}
-    }
-  }
-  ]
-  const result  = await orderCollection.aggregate(pipeline).toArray()
-  res.send(result)
+app.get('/orders/payment-status/stats',verifyFBToken ,verifyAdmin, async(req,res)=>{
+  // const totalUsers = await userCollection.countDocuments();
+  // const pipeline = [
+  //  { 
+  //   $group:{
+  //     _id:'$paymentStatus',
+  //     count:{$sum:1}
+  //   }
+  // }
+  // ]
+  // const result  = await orderCollection.aggregate(pipeline).toArray()
+  // res.send({result, totalUsers})
+   const totalUsers = await userCollection.countDocuments();
+
+    // Orders Pending (not delivered yet)
+    const pendingOrders = await orderCollection.countDocuments({
+      orderStatus: { $ne: 'delivered' },
+    });
+
+    // Orders Delivered
+    const deliveredOrders = await orderCollection.countDocuments({
+      orderStatus: 'delivered',
+    });
+
+    // Total Payment Amount
+    const paymentAgg = await paymentOrderCollection.aggregate([
+      {
+        $group: {
+          _id: null,
+          totalAmount: { $sum: '$price' },
+        },
+      },
+    ]).toArray();
+
+    const totalPaymentAmount = paymentAgg[0]?.totalAmount || 0;
+
+    res.send({
+      totalUsers,
+      pendingOrders,
+      deliveredOrders,
+      totalPaymentAmount,
+    });
 })
 // order data
 app.post('/orders',verifyFBToken,async (req,res)=>{
@@ -369,6 +415,44 @@ app.get('/order', verifyFBToken, verifyChef, async (req, res) => {
   } catch (error) {
     res.status(500).send({ message: 'Server error' });
   }
+});
+// handle order request
+app.patch('/orders/:id', verifyFBToken, verifyChef, async (req, res) => {
+  const id = req.params.id;
+  const { orderStatus } = req.body;
+  const order = await orderCollection.findOne({
+    _id: new ObjectId(id),
+    chefId: req.chef.chefId
+  });
+
+  if (!order) {
+    return res.status(404).send({ message: 'Order not found' });
+  }
+
+  
+  if (order.orderStatus === 'cancelled' || order.orderStatus === 'delivered') {
+    return res.status(400).send({ message: 'Action not allowed' });
+  }
+
+  if (order.orderStatus === 'pending' && !['accepted', 'cancelled'].includes(orderStatus)) {
+    return res.status(400).send({ message: 'Invalid status change' });
+  }
+
+  if (order.orderStatus === 'accepted' && orderStatus !== 'delivered') {
+    return res.status(400).send({ message: 'Only deliver allowed' });
+  }
+
+ 
+  const result = await orderCollection.updateOne(
+    { _id: new ObjectId(id) },
+    {
+      $set: {
+        orderStatus: orderStatus
+      }
+    }
+  );
+
+  res.send(result);
 });
 
 
