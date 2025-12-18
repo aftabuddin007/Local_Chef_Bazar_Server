@@ -30,7 +30,7 @@ app.use(express.json());
 app.use(cors());
 
 const verifyFBToken =async (req,res,next)=>{
-// console.log(req.headers.authorization)
+
 const token = req.headers.authorization;
 if(!token){
   return res.status(401).send({message:'Unauthorized access'})
@@ -128,7 +128,7 @@ app.get('/users/:email/role',async(req,res)=>{
 
 })
 // upload meal
-app.post('/meals',verifyFBToken,async (req,res)=>{
+app.post('/meals',verifyFBToken,verifyChef,async (req,res)=>{
   const email = req.decoded_email;
   const mealData = req.body;
   // console.log(mealData)
@@ -165,7 +165,7 @@ app.post('/meals',verifyFBToken,async (req,res)=>{
 
 // get specific meal
  
-app.get('/meal',async(req,res)=>{
+app.get('/meal',verifyFBToken,verifyChef,async(req,res)=>{
   const query = {}
   const {email}=req.query;
   if(email){
@@ -176,7 +176,7 @@ app.get('/meal',async(req,res)=>{
   res.send(result)
 })
 // update meal details
-app.put('/meals/:id',async (req,res)=>{
+app.put('/meals/:id', verifyFBToken,verifyChef,async (req,res)=>{
   const id = req.params.id;
   const updateData = req.body;
     const result = await mealCollection.updateOne(
@@ -197,8 +197,23 @@ app.delete('/meal/:id',async (req,res)=>{
 })
 // get all meal
 app.get('/meals', async (req,res)=>{
-  const result = await mealCollection.find().toArray()
+  const {limit,skip} = req.query;
+  // console.log(limit)
+    const sort = req.query.sort;
+
+  let sortOptions = {};
+
+  if (sort === 'asc') sortOptions = { price: 1 };
+  if (sort === 'desc') sortOptions = { price: -1 };
+  const result = await mealCollection.find()
+  .limit(Number(limit)).skip(Number(skip))
+  .sort(sortOptions).project({ingredients:0}).toArray();
   res.send(result)
+})
+// meal pagenaition
+app.get('/meals-count', async (req,res)=>{
+  const count = await mealCollection.estimatedDocumentCount();
+  res.send({count})
 })
 // meal-details
 app.get('/meals/:id',async (req,res)=>{
@@ -329,19 +344,8 @@ app.post('/payment-success',async(req,res)=>{
 })
 // statistics
 app.get('/orders/payment-status/stats',verifyFBToken ,verifyAdmin, async(req,res)=>{
-  // const totalUsers = await userCollection.countDocuments();
-  // const pipeline = [
-  //  { 
-  //   $group:{
-  //     _id:'$paymentStatus',
-  //     count:{$sum:1}
-  //   }
-  // }
-  // ]
-  // const result  = await orderCollection.aggregate(pipeline).toArray()
-  // res.send({result, totalUsers})
+ 
    const totalUsers = await userCollection.countDocuments();
-
     // Orders Pending (not delivered yet)
     const pendingOrders = await orderCollection.countDocuments({
       orderStatus: { $ne: 'delivered' },
@@ -382,7 +386,7 @@ if (user?.role === 'customer' && user?.status === 'fraud') {
       message: 'Fraud users cannot place orders'
     });
   }
-  order.paymentStatus = "Pending";
+  order.paymentStatus = "pending";
   order.orderStatus = "pending";
   order.orderTime = new Date().toLocaleTimeString()
    const result = await orderCollection.insertOne(order);
@@ -471,11 +475,11 @@ app.patch('/orders/:id', verifyFBToken, verifyChef, async (req, res) => {
 // });
 
 // my review for specific 
-app.get('/reviews',async(req,res)=>{
+app.get('/review',async(req,res)=>{
   const query = {}
   const {email}=req.query;
   if(email){
-    query.userEmail=email
+    query.reviewerEmail=email
   }
   const cursor = reviewCollection.find(query)
   const result = await cursor.toArray()
@@ -526,7 +530,7 @@ app.delete('/favorites/:id',async (req,res)=>{
   res.send(result);
 })
 // my profile api
-app.get('/user',async(req,res)=>{
+app.get('/user', verifyFBToken, async(req,res)=>{
   const query = {}
   const {email}=req.query;
   if(email){
@@ -554,7 +558,7 @@ app.get('/request',verifyFBToken, verifyAdmin,async (req,res)=>{
   res.send(result)
 })
 //add & cancel user request
-app.patch('/request/:id',verifyFBToken,async (req,res)=>{
+app.patch('/request/:id',verifyFBToken,verifyAdmin,async (req,res)=>{
     const id = req.params.id;
     const requestStatus = req.body.requestStatus
     const request = await requestCollection.findOne({ _id: new ObjectId(id) });
