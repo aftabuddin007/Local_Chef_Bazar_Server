@@ -8,19 +8,17 @@ const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY)
 
 const admin = require("firebase-admin");
 
-const serviceAccount = require("./firebase-adminsdk.json");
+// const serviceAccount = require("./firebase-adminsdk.json");
+
+
+
+const decoded = Buffer.from(process.env.FB_SERVICE_KEY, 'base64').toString('utf8')
+const serviceAccount = JSON.parse(decoded);
+
 
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount)
 });
-
-
-// Create a MongoClient with a MongoClientOptions object to set the Stable API version
-
-
-
-
-
 
 
 
@@ -63,8 +61,7 @@ const client = new MongoClient(uri, {
 
 async function run() {
     try {
-    // Connect the client to the server	(optional starting in v4.7)
-    await client.connect();
+    
 // admin token
 const verifyAdmin = async (req, res, next) => {
   const email = req.decoded_email; 
@@ -150,18 +147,8 @@ app.post('/meals',verifyFBToken,verifyChef,async (req,res)=>{
       result
     });
 })
-// fraud can't upload meal
-// app.post('/meals', verifyFBToken,  async (req, res) => {
-//   const email = req.decoded_email;
 
-//   const user = await userCollection.findOne({ email });
 
-//   if (user.status === "fraud") {
-//     return res.status(403).send({ message: "Fraud chefs cannot create meals" });
-//   }
-
-  
-// });
 
 // get specific meal
  
@@ -196,25 +183,70 @@ app.delete('/meal/:id',async (req,res)=>{
   res.send(result);
 })
 // get all meal
-app.get('/meals', async (req,res)=>{
-  const {limit,skip} = req.query;
-  // console.log(limit)
-    const sort = req.query.sort;
+// app.get('/meals', async (req,res)=>{
+//   const {limit,skip} = req.query;
+//   // console.log(limit)
+//     const sort = req.query.sort;
 
-  let sortOptions = {};
+//   let sortOptions = {};
 
-  if (sort === 'asc') sortOptions = { price: 1 };
-  if (sort === 'desc') sortOptions = { price: -1 };
-  const result = await mealCollection.find()
-  .limit(Number(limit)).skip(Number(skip))
-  .sort(sortOptions).project({ingredients:0}).toArray();
-  res.send(result)
-})
+//   if (sort === 'asc') sortOptions = { price: 1 };
+//   if (sort === 'desc') sortOptions = { price: -1 };
+//   const result = await mealCollection.find()
+//   .limit(Number(limit)).skip(Number(skip))
+//   .sort(sortOptions).project({ingredients:0}).toArray();
+//   res.send(result)
+// })
+app.get('/meals', async (req, res) => {
+  const search = req.query.search || "";
+  const sort = req.query.sort;
+  const limit = parseInt(req.query.limit);
+  const skip = parseInt(req.query.skip);
+
+  const query = search
+    ? {
+        $or: [
+          { foodName: { $regex: search, $options: 'i' } },
+          { chefName: { $regex: search, $options: 'i' } }
+        ]
+      }
+    : {};
+
+  let sortOption = {};
+  if (sort === "asc") sortOption = { price: 1 };
+  if (sort === "desc") sortOption = { price: -1 };
+
+  const meals = await mealCollection
+    .find(query)
+    .sort(sortOption)
+    .skip(skip)
+    .limit(limit)
+    .toArray();
+
+  res.send(meals);
+});
+
 // meal pagenaition
-app.get('/meals-count', async (req,res)=>{
-  const count = await mealCollection.estimatedDocumentCount();
-  res.send({count})
-})
+// app.get('/meals-count', async (req,res)=>{
+//   const count = await mealCollection.estimatedDocumentCount();
+//   res.send({count})
+// })
+app.get('/meals-count', async (req, res) => {
+  const search = req.query.search || "";
+
+  const query = search
+    ? {
+        $or: [
+          { foodName: { $regex: search, $options: 'i' } },
+          { chefName: { $regex: search, $options: 'i' } }
+        ]
+      }
+    : {};
+
+  const count = await mealCollection.countDocuments(query);
+  res.send({ count });
+});
+
 // meal-details
 app.get('/meals/:id',async (req,res)=>{
   const {id}= req.params
@@ -397,7 +429,7 @@ if (user?.role === 'customer' && user?.status === 'fraud') {
   });
 })
 // show order data 
-app.get('/orders',async(req,res)=>{
+app.get('/orders',verifyFBToken,async(req,res)=>{
   const query = {}
   const {email}=req.query;
   if(email){
@@ -461,18 +493,6 @@ app.patch('/orders/:id', verifyFBToken, verifyChef, async (req, res) => {
 
 
 
-// fraud can't order
-// app.post('/order', verifyFBToken, async (req, res) => {
-//   const email = req.decoded_email;
-
-//   const user = await userCollection.findOne({ email });
-
-//   if (user.status === "fraud") {
-//     return res.status(403).send({ message: "Fraud users cannot place orders" });
-//   }
-
-
-// });
 
 // my review for specific 
 app.get('/review',async(req,res)=>{
@@ -543,6 +563,18 @@ app.get('/user', verifyFBToken, async(req,res)=>{
 //user request collection
 app.post('/request',async(req,res)=>{
   const request = req.body;
+    const existingRequest = await requestCollection.findOne({
+      userEmail: request.userEmail,
+      requestType: request.requestType,
+      requestStatus: "pending"
+    });
+
+    if (existingRequest) {
+      return res.send({
+        success: false,
+        message: "Request already pending"
+      });
+    }
   request.requestStatus = "pending"; 
   request.requestTime = new Date().toLocaleTimeString();
   const result = await requestCollection.insertOne(request)
@@ -607,8 +639,9 @@ app.get('/recent-meal',async(req,res)=>{
   res.send(result)
 })
 
+
     // Send a ping to confirm a successful connection
-    await client.db("admin").command({ ping: 1 });
+    // await client.db("admin").command({ ping: 1 });
     console.log("Pinged your deployment. You successfully connected to MongoDB!");
   } finally {
     // Ensures that the client will close when you finish/error
