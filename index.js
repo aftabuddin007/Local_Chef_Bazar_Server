@@ -124,6 +124,61 @@ app.get('/users/:email/role',async(req,res)=>{
   res.send({role:user?.role || 'customer'})
 
 })
+
+// update user info
+
+app.patch('/users/profile/:email', async (req, res) => {
+  try {
+    const email = req.params.email;
+    const { name, image, address } = req.body;
+
+    if (!name || !address || !image) {
+      return res.status(400).send({
+        success: false,
+        message: 'All fields are required',
+      });
+    }
+
+    const filter = { email };
+
+    const updateDoc = {
+      $set: {
+        name,
+        image,
+        address,
+        updatedAt: new Date(),
+      },
+    };
+
+    const result = await userCollection.updateOne(filter, updateDoc);
+
+    if (result.matchedCount === 0) {
+      return res.status(404).send({
+        success: false,
+        message: 'User not found',
+      });
+    }
+
+    if (result.modifiedCount === 0) {
+      return res.send({
+        success: false,
+        message: 'No changes detected',
+      });
+    }
+
+    res.send({
+      success: true,
+      message: 'Profile updated successfully',
+    });
+  } catch (error) {
+    res.status(500).send({
+      success: false,
+      message: 'Something went wrong',
+    });
+  }
+});
+
+
 // upload meal
 app.post('/meals',verifyFBToken,verifyChef,async (req,res)=>{
   const email = req.decoded_email;
@@ -183,54 +238,61 @@ app.delete('/meal/:id',async (req,res)=>{
   res.send(result);
 })
 // get all meal
-// app.get('/meals', async (req,res)=>{
-//   const {limit,skip} = req.query;
-//   // console.log(limit)
-//     const sort = req.query.sort;
 
-//   let sortOptions = {};
 
-//   if (sort === 'asc') sortOptions = { price: 1 };
-//   if (sort === 'desc') sortOptions = { price: -1 };
-//   const result = await mealCollection.find()
-//   .limit(Number(limit)).skip(Number(skip))
-//   .sort(sortOptions).project({ingredients:0}).toArray();
-//   res.send(result)
-// })
 app.get('/meals', async (req, res) => {
-  const search = req.query.search || "";
-  const sort = req.query.sort;
-  const limit = parseInt(req.query.limit);
-  const skip = parseInt(req.query.skip);
+  try {
+    const search = req.query.search || "";
+    const sort = req.query.sort;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = parseInt(req.query.skip) || 0;
+    const rating = req.query.rating;
+    const deliveryArea = req.query.deliveryArea;
 
-  const query = search
-    ? {
-        $or: [
-          { foodName: { $regex: search, $options: 'i' } },
-          { chefName: { $regex: search, $options: 'i' } }
-        ]
-      }
-    : {};
+    let query = {};
 
-  let sortOption = {};
-  if (sort === "asc") sortOption = { price: 1 };
-  if (sort === "desc") sortOption = { price: -1 };
+    // 🔍 Search by food name or chef name
+    if (search) {
+      query.$or = [
+        { foodName: { $regex: search, $options: 'i' } },
+        { chefName: { $regex: search, $options: 'i' } }
+      ];
+    }
 
-  const meals = await mealCollection
-    .find(query)
-    .sort(sortOption)
-    .skip(skip)
-    .limit(limit)
-    .toArray();
+    // ⭐ Rating filter (greater than or equal)
+    if (rating) {
+      query.rating = { $gte: parseFloat(rating) };
+    }
 
-  res.send(meals);
+    // 📍 Delivery Area filter
+    if (deliveryArea) {
+      query.deliveryArea = deliveryArea;
+    }
+
+    // 🔃 Sort by price
+    let sortOption = {};
+    if (sort === "asc") sortOption = { price: 1 };
+    if (sort === "desc") sortOption = { price: -1 };
+
+    const meals = await mealCollection
+      .find(query)
+      .sort(sortOption)
+      .skip(skip)
+      .limit(limit)
+      .toArray();
+
+    res.send(meals);
+  } catch (error) {
+    console.error(error);
+    res.status(500).send({ message: 'Server error' });
+  }
 });
 
+
+
 // meal pagenaition
-// app.get('/meals-count', async (req,res)=>{
-//   const count = await mealCollection.estimatedDocumentCount();
-//   res.send({count})
-// })
+
+
 app.get('/meals-count', async (req, res) => {
   const search = req.query.search || "";
 
@@ -330,7 +392,7 @@ app.post('/create-checkout-session',async (req,res)=>{
     orderId:paymentInfo.orderId
     },
     success_url:`${process.env.CLIENT_DOMIAN}/dashboard/payment-success?session_id={CHECKOUT_SESSION_ID}`,
-    cancel_url:`${process.env.CLIENT_DOMIAN}/dashboard/myOrder`
+    cancel_url:`${process.env.CLIENT_DOMIAN}/dashboard/myOrder`,
   })
   res.send({url:session.url})
 })
